@@ -389,6 +389,23 @@ public class Flux2Pipeline: @unchecked Sendable {
         Flux2Debug.log("Loading transformer weights from disk...")
         var weights = try Flux2WeightLoader.loadWeights(from: modelPath)
 
+        // Pre-quantized (MLX/mflux) checkpoint: convert matching modules to
+        // QuantizedLinear BEFORE applying weights, so scales/biases tensors load
+        // directly and bf16 weights are never materialized (same pattern as the
+        // Qwen3 text encoder). Critical on memory-constrained targets (iOS).
+        let isPreQuantized = Flux2WeightLoader.containsPreQuantizedWeights(weights)
+        if isPreQuantized {
+            let quantizedPaths = Flux2WeightLoader.preQuantizedTransformerModulePaths(weights)
+            let bits = quantization.transformer.bits
+            let groupSize = quantization.transformer.groupSize
+            let mode = quantization.transformer.mode
+            Flux2Debug.log(
+                "Pre-quantized checkpoint detected: structuring \(quantizedPaths.count) modules as QuantizedLinear (\(bits)-bit, groupSize=\(groupSize), \(mode.rawValue))")
+            quantize(model: transformer!, groupSize: groupSize, bits: bits, mode: mode) { path, _ in
+                quantizedPaths.contains(path)
+            }
+        }
+
         Flux2Debug.log("Applying weights to model...")
         try Flux2WeightLoader.applyTransformerWeights(&weights, to: transformer!)
 
@@ -407,7 +424,7 @@ public class Flux2Pipeline: @unchecked Sendable {
         // - Reduces memory usage proportionally to bit width (8-bit: ~50%, 4-bit: ~75%)
         // - Uses optimized quantizedMM() for faster inference on Apple Silicon
         // - Enables efficient dequant→merge→requant for LoRA weight merging
-        if quantization.transformer != .bf16 {
+        if quantization.transformer != .bf16 && !isPreQuantized {
             let bits = quantization.transformer.bits
             let groupSize = quantization.transformer.groupSize
             let mode = quantization.transformer.mode

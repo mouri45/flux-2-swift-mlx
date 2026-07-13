@@ -49,6 +49,29 @@ public class Flux2WeightLoader {
         return try loadWeights(from: url.path)
     }
 
+    // MARK: - Pre-quantized (MLX/mflux) checkpoint support
+
+    /// Detect MLX/mflux pre-quantized checkpoints (QuantizedLinear tensors saved as
+    /// weight + scales + biases triplets). Distinct from quanto (._data/._scale).
+    public static func containsPreQuantizedWeights(_ weights: [String: MLXArray]) -> Bool {
+        weights.keys.contains { $0.hasSuffix(".scales") }
+    }
+
+    /// Module paths (mapped to Swift module naming) that are quantized in the checkpoint.
+    /// Used as a `quantize(model:filter:)` predicate so the model structure matches the
+    /// checkpoint exactly (layers without scales stay as regular Linear/RMSNorm).
+    public static func preQuantizedTransformerModulePaths(_ weights: [String: MLXArray]) -> Set<String> {
+        var paths = Set<String>()
+        for key in weights.keys where key.hasSuffix(".scales") {
+            var base = String(key.dropLast(".scales".count))
+            if base.hasPrefix("transformer.") {
+                base = String(base.dropFirst("transformer.".count))
+            }
+            paths.insert(mapTransformerKeySimple(base))
+        }
+        return paths
+    }
+
     // MARK: - Transformer Weight Mapping
 
     /// Detect if weights are in BFL (Black Forest Labs) native format

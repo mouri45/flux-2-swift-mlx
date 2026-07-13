@@ -39,8 +39,10 @@ public class Flux2ModelDownloader: @unchecked Sendable {
         let localPath = ModelRegistry.localPath(for: component)
 
         // Check for config.json OR model_index.json (Klein models use the latter)
+        // OR model.safetensors.index.json (mflux/mlx-community sharded layout)
         let hasConfig = FileManager.default.fileExists(atPath: localPath.appendingPathComponent("config.json").path)
         let hasModelIndex = FileManager.default.fileExists(atPath: localPath.appendingPathComponent("model_index.json").path)
+            || FileManager.default.fileExists(atPath: localPath.appendingPathComponent("model.safetensors.index.json").path)
 
         if hasConfig || hasModelIndex {
             let verification = verifyModel(at: localPath)
@@ -59,6 +61,7 @@ public class Flux2ModelDownloader: @unchecked Sendable {
 
         let cacheHasConfig = FileManager.default.fileExists(atPath: path.appendingPathComponent("config.json").path)
         let cacheHasModelIndex = FileManager.default.fileExists(atPath: path.appendingPathComponent("model_index.json").path)
+            || FileManager.default.fileExists(atPath: path.appendingPathComponent("model.safetensors.index.json").path)
 
         if cacheHasConfig || cacheHasModelIndex {
             let verification = verifyModel(at: path)
