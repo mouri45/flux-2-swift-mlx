@@ -39,6 +39,9 @@ let package = Package(
                 .product(name: "MLXRandom", package: "mlx-swift"),
                 .product(name: "MLXFast", package: "mlx-swift"),
                 .product(name: "Transformers", package: "swift-transformers"),
+                // Direct product reference so the exact swift-jinja pin above is not
+                // pruned as an unused dependency during consumer resolution.
+                .product(name: "Jinja", package: "swift-jinja"),
                 .product(name: "MLXProfiler", package: "swift-mlx-profiler"),
             ]
         ),
