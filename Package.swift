@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Flux2Swift",
-    platforms: [.macOS(.v15)],
+    platforms: [.macOS(.v15), .iOS(.v17)],
     products: [
         // Libraries
         .library(name: "FluxTextEncoders", targets: ["FluxTextEncoders"]),

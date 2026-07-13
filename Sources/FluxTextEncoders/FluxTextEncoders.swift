@@ -813,6 +813,7 @@ public final class FluxTextEncoders: @unchecked Sendable {
     ///   - parameters: Generation parameters
     ///   - onToken: Callback for streaming tokens
     /// - Returns: Generated description/analysis
+    #if canImport(AppKit)
     public func analyzeImage(
         image: NSImage,
         prompt: String,
@@ -966,6 +967,7 @@ public final class FluxTextEncoders: @unchecked Sendable {
             tokensPerSecond: tokensPerSecond
         )
     }
+    #endif
 
     /// Analyze image from file path
     /// - Parameters:
@@ -982,12 +984,16 @@ public final class FluxTextEncoders: @unchecked Sendable {
         parameters: GenerateParameters = .balanced,
         onToken: ((String) -> Bool)? = nil
     ) throws -> GenerationResult {
+        #if canImport(AppKit)
         guard let processor = imageProcessor else {
             throw FluxEncoderError.vlmNotLoaded
         }
 
         let image = try processor.loadImage(from: path)
         return try analyzeImage(image: image, prompt: prompt, systemPrompt: systemPrompt, parameters: parameters, onToken: onToken)
+        #else
+        throw FluxEncoderError.vlmNotLoaded
+        #endif
     }
 
     /// Format vision prompt following Mistral chat template

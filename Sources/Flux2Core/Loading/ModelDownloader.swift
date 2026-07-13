@@ -71,7 +71,7 @@ public class Flux2ModelDownloader: @unchecked Sendable {
         }
 
         // Check legacy HuggingFace cache
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser
+        let homeDir = URL(fileURLWithPath: NSHomeDirectory())
         let hubCache = homeDir
             .appendingPathComponent(".cache")
             .appendingPathComponent("huggingface")

@@ -51,6 +51,7 @@ public class ImageProcessor {
         self.config = config
     }
 
+    #if canImport(AppKit)
     /// Preprocess an image for the vision encoder
     /// - Parameter image: Input NSImage
     /// - Returns: MLXArray with shape [1, H, W, 3] (NHWC format for MLX Conv2d)
@@ -237,6 +238,7 @@ public class ImageProcessor {
         let image = try loadImage(from: path)
         return try preprocess(image)
     }
+    #endif
 
     /// Get number of patches for a given image size
     public func getNumPatches(width: Int, height: Int) -> (patchesX: Int, patchesY: Int, total: Int) {

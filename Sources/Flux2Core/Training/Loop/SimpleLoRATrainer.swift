@@ -7,8 +7,12 @@ import Foundation
 import MLXNN
 import MLXOptimizers
 import CoreGraphics
-import AppKit
 import ImageIO
+
+#if canImport(AppKit)
+import AppKit
+#endif
+
 import UniformTypeIdentifiers
 import FluxTextEncoders
 

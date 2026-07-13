@@ -692,15 +692,16 @@ extension LoRATrainingHelper {
                   let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
                 throw LoRATrainingHelperError.failedToLoadImage(url.lastPathComponent)
             }
-            #else
-            fatalError("iOS not yet supported")
-            #endif
 
             images.append(TrainingImage(
                 filename: url.lastPathComponent,
                 image: cgImage,
                 caption: caption
             ))
+            #else
+            _ = (url, caption)
+            fatalError("iOS not yet supported")
+            #endif
         }
 
         return try await prepareTrainingData(
