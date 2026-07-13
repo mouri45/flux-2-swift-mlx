@@ -112,6 +112,9 @@ struct TextToImage: AsyncParsableCommand {
     @Option(name: .long, help: "Memory profile: auto (default), conservative, balanced, performance")
     var memoryProfile: String = "auto"
 
+    @Option(name: .long, help: "Memory optimization override: auto (default, by RAM), disabled, light, moderate, aggressive, ultra")
+    var memoryOpt: String = "auto"
+
     @Option(name: .long, help: "HuggingFace token for gated models (or set HF_TOKEN env var)")
     var hfToken: String?
 
@@ -264,8 +267,23 @@ struct TextToImage: AsyncParsableCommand {
             throw ValidationError("Invalid VAE variant: \(vaeVariant). Use standard or small-decoder")
         }
 
+        // Parse memory optimization override (simulates memory-constrained targets on Mac)
+        let memOptConfig: MemoryOptimizationConfig?
+        switch memoryOpt.lowercased() {
+        case "auto": memOptConfig = nil
+        case "disabled": memOptConfig = .disabled
+        case "light": memOptConfig = .light
+        case "moderate": memOptConfig = .moderate
+        case "aggressive": memOptConfig = .aggressive
+        case "ultra": memOptConfig = .ultraLowMemory
+        default:
+            throw ValidationError("Invalid memory optimization: \(memoryOpt). Use auto, disabled, light, moderate, aggressive, or ultra")
+        }
+
         // Create pipeline with HuggingFace token
-        let pipeline = Flux2Pipeline(model: modelVariant, quantization: quantConfig, vaeVariant: vaeVar, hfToken: token)
+        let pipeline = Flux2Pipeline(
+            model: modelVariant, quantization: quantConfig,
+            memoryOptimization: memOptConfig, vaeVariant: vaeVar, hfToken: token)
 
         // Set memory profile
         switch memoryProfile.lowercased() {
@@ -441,6 +459,9 @@ struct ImageToImage: AsyncParsableCommand {
     @Option(name: .long, help: "Memory profile: auto (default), conservative, balanced, performance")
     var memoryProfile: String = "auto"
 
+    @Option(name: .long, help: "Memory optimization override: auto (default, by RAM), disabled, light, moderate, aggressive, ultra")
+    var memoryOpt: String = "auto"
+
     @Option(name: .long, help: "HuggingFace token for gated models (or set HF_TOKEN env var)")
     var hfToken: String?
 
@@ -606,8 +627,23 @@ struct ImageToImage: AsyncParsableCommand {
             throw ValidationError("Invalid VAE variant: \(vaeVariant). Use standard or small-decoder")
         }
 
+        // Parse memory optimization override (simulates memory-constrained targets on Mac)
+        let memOptConfig: MemoryOptimizationConfig?
+        switch memoryOpt.lowercased() {
+        case "auto": memOptConfig = nil
+        case "disabled": memOptConfig = .disabled
+        case "light": memOptConfig = .light
+        case "moderate": memOptConfig = .moderate
+        case "aggressive": memOptConfig = .aggressive
+        case "ultra": memOptConfig = .ultraLowMemory
+        default:
+            throw ValidationError("Invalid memory optimization: \(memoryOpt). Use auto, disabled, light, moderate, aggressive, or ultra")
+        }
+
         // Create pipeline with HuggingFace token
-        let pipeline = Flux2Pipeline(model: modelVariant, quantization: quantConfig, vaeVariant: vaeVar, hfToken: token)
+        let pipeline = Flux2Pipeline(
+            model: modelVariant, quantization: quantConfig,
+            memoryOptimization: memOptConfig, vaeVariant: vaeVar, hfToken: token)
 
         // Set memory profile
         switch memoryProfile.lowercased() {

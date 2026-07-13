@@ -63,11 +63,15 @@ public class Flux2WeightLoader {
     public static func preQuantizedTransformerModulePaths(_ weights: [String: MLXArray]) -> Set<String> {
         var paths = Set<String>()
         for key in weights.keys where key.hasSuffix(".scales") {
-            var base = String(key.dropLast(".scales".count))
-            if base.hasPrefix("transformer.") {
-                base = String(base.dropFirst("transformer.".count))
+            var full = key
+            if full.hasPrefix("transformer.") {
+                full = String(full.dropFirst("transformer.".count))
             }
-            paths.insert(mapTransformerKeySimple(base))
+            // Map the FULL key (with .scales) first: the mapping rules match component
+            // names with a trailing dot (e.g. "attn.to_qkv_mlp_proj."), which is only
+            // present before the parameter suffix. Then strip the suffix.
+            let mapped = mapTransformerKeySimple(full)
+            paths.insert(String(mapped.dropLast(".scales".count)))
         }
         return paths
     }
@@ -463,6 +467,16 @@ public class Flux2WeightLoader {
         mapped = mapped.replacingOccurrences(of: "ff_context.", with: "ffContext.")
         mapped = mapped.replacingOccurrences(of: "linear_in.", with: "activation.proj.")
         mapped = mapped.replacingOccurrences(of: "linear_out.", with: "linearOut.")
+
+        // mflux flux2 layout flattens the timestep MLP into time_guidance_embed.linear_N
+        // (Swift model nests it: timeGuidanceEmbed.timestepEmbedder.linearN).
+        // Must run before the generic time_guidance_embed./linear_N. rules below.
+        mapped = mapped.replacingOccurrences(
+            of: "time_guidance_embed.linear_1.",
+            with: "timeGuidanceEmbed.timestepEmbedder.linear1.")
+        mapped = mapped.replacingOccurrences(
+            of: "time_guidance_embed.linear_2.",
+            with: "timeGuidanceEmbed.timestepEmbedder.linear2.")
 
         // Map embeddings
         mapped = mapped.replacingOccurrences(of: "x_embedder.", with: "xEmbedder.")
