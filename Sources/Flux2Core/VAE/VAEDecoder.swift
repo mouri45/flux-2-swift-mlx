@@ -88,6 +88,17 @@ public class VAEDecoder: Module, @unchecked Sendable {
         )
     }
 
+    /// FLUX2_MEMDEBUG=1: 区間ごとにevalしてピークを記録(計測専用)
+    private static let memDebug = ProcessInfo.processInfo.environment["FLUX2_MEMDEBUG"] != nil
+
+    @inline(__always)
+    private func memCheckpoint(_ label: String, _ array: MLXArray) {
+        guard Self.memDebug else { return }
+        eval(array)
+        Flux2Debug.log(
+            "[vae-memdbg] \(label): peak=\(MLX.Memory.peakMemory / 1_048_576)MB active=\(MLX.Memory.activeMemory / 1_048_576)MB")
+    }
+
     public func callAsFunction(_ z: MLXArray) -> MLXArray {
         // z shape: [B, latent_channels, H/8, W/8] (NCHW from transformer)
         // Convert to NHWC for MLX Conv2d
@@ -95,26 +106,39 @@ public class VAEDecoder: Module, @unchecked Sendable {
 
         // Initial conv
         hidden = convIn(hidden)
+        memCheckpoint("convIn", hidden)
 
         // Mid block
         hidden = midBlock.resnet1(hidden)
         hidden = midBlock.attention(hidden)
         hidden = midBlock.resnet2(hidden)
+        memCheckpoint("midBlock", hidden)
 
         // Up blocks
-        for (resBlocks, upsample) in upBlocks {
-            for resBlock in resBlocks {
+        // Evaluate per residual block / upsample: without barriers the decoder
+        // graph materializes at once and peak GPU memory balloons (measured:
+        // no eval = +4.2GB, per-stage eval = +3.5GB, per-block eval = +1.2GB
+        // above baseline at 512px on klein-4b — the pipeline peak was in the
+        // VAE, not the transformer). Cost is a few ms of sync per block.
+        for (stageIdx, (resBlocks, upsample)) in upBlocks.enumerated() {
+            for (blockIdx, resBlock) in resBlocks.enumerated() {
                 hidden = resBlock(hidden)
+                eval(hidden)
+                memCheckpoint("up[\(stageIdx)].res[\(blockIdx)]", hidden)
             }
             if let us = upsample {
                 hidden = us(hidden)
+                eval(hidden)
+                memCheckpoint("up[\(stageIdx)].upsample", hidden)
             }
+            MLX.Memory.clearCache()
         }
 
         // Output
         hidden = convNormOut(hidden)
         hidden = silu(hidden)
         hidden = convOut(hidden)
+        memCheckpoint("convOut", hidden)
 
         // Convert back to NCHW for output: [B, H, W, 3] -> [B, 3, H, W]
         return hidden.transposed(0, 3, 1, 2)

@@ -120,6 +120,19 @@ public class Flux2Transformer2DModel: Module, @unchecked Sendable {
     ///   - imgIds: Image position IDs [S_img, 4]
     ///   - txtIds: Text position IDs [S_txt, 4]
     /// - Returns: Predicted noise [B, S_img, 128]
+    /// FLUX2_MEMDEBUG=1 のとき、forward内の区間ごとに評価を強制してピークメモリを記録する
+    /// (計測専用: evalを挟むため実行タイミングが変わる。本番では使わない)
+    private static let memDebug = ProcessInfo.processInfo.environment["FLUX2_MEMDEBUG"] != nil
+
+    @inline(__always)
+    private func memCheckpoint(_ label: String, _ arrays: MLXArray...) {
+        guard Self.memDebug else { return }
+        eval(arrays)
+        let peakMB = MLX.Memory.peakMemory / 1_048_576
+        let activeMB = MLX.Memory.activeMemory / 1_048_576
+        Flux2Debug.log("[memdbg] \(label): peak=\(peakMB)MB active=\(activeMB)MB")
+    }
+
     public func callAsFunction(
         hiddenStates: MLXArray,
         encoderHiddenStates: MLXArray,
@@ -153,6 +166,7 @@ public class Flux2Transformer2DModel: Module, @unchecked Sendable {
         let combinedIds = concatenated([txtIds, imgIds], axis: 0)
         let ropeEmb = posEmbed(combinedIds)
         Flux2Debug.verbose("RoPE shapes - cos: \(ropeEmb.cos.shape), sin: \(ropeEmb.sin.shape)")
+        memCheckpoint("embedders+rope", imgHS, txtHS, temb, ropeEmb.cos, ropeEmb.sin)
 
         // --- Double-Stream Blocks ---
         // OPTIMIZATION: Compute modulation parameters ONCE before the loop
@@ -222,6 +236,7 @@ public class Flux2Transformer2DModel: Module, @unchecked Sendable {
                 txtHS = newTxt
             }
             Flux2Debug.verbose("After block \(blockIdx) - imgHS: \(imgHS.shape), txtHS: \(txtHS.shape)")
+            memCheckpoint("double[\(blockIdx)]", imgHS, txtHS)
 
             // Memory optimization: periodic evaluation to prevent graph accumulation
             // Skip when gradient checkpointing is active (checkpoint boundaries handle segmentation)
@@ -298,6 +313,7 @@ public class Flux2Transformer2DModel: Module, @unchecked Sendable {
                     modParams: singleMod
                 )
             }
+            memCheckpoint("single[\(blockIdx)]", combinedHS)
 
             // Memory optimization: periodic evaluation to prevent graph accumulation
             // Skip when gradient checkpointing is active (checkpoint boundaries handle segmentation)
@@ -322,6 +338,7 @@ public class Flux2Transformer2DModel: Module, @unchecked Sendable {
 
         // Project to output channels
         let output = projOut(imgHS)
+        memCheckpoint("output", output)
 
         return output
     }
