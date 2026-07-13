@@ -23,6 +23,9 @@ let package = Package(
         .package(url: "https://github.com/ml-explore/mlx-swift", exact: "0.31.6"),
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.8.2"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.3.3"),
+        // Transitive pin: swift-jinja 2.4.0 changed Value.object keys to ObjectKey,
+        // breaking swift-transformers 1.3.3 (Hub/Config.swift). Pin the verified pair.
+        .package(url: "https://github.com/huggingface/swift-jinja.git", exact: "2.3.6"),
         .package(url: "https://github.com/jpsim/Yams", from: "6.0.0"),
         .package(url: "https://github.com/VincentGourbin/swift-mlx-profiler", from: "1.4.0"),
     ],
