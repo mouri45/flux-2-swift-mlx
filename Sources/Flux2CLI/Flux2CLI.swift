@@ -5,6 +5,7 @@ import Foundation
 import ArgumentParser
 import Flux2Core
 import FluxTextEncoders
+import MLX
 import ImageIO
 import UniformTypeIdentifiers
 
@@ -114,6 +115,12 @@ struct TextToImage: AsyncParsableCommand {
 
     @Option(name: .long, help: "Memory optimization override: auto (default, by RAM), disabled, light, moderate, aggressive, ultra")
     var memoryOpt: String = "auto"
+
+    @Option(name: .long, help: "Generate N times in one process (memory-residency testing)")
+    var repeatCount: Int = 1
+
+    @Flag(name: .long, help: "Call clearAll() between repeated generations (sequential-reload strategy)")
+    var clearBetween: Bool = false
 
     @Option(name: .long, help: "HuggingFace token for gated models (or set HF_TOKEN env var)")
     var hfToken: String?
@@ -348,31 +355,46 @@ struct TextToImage: AsyncParsableCommand {
             checkpointDir = nil
         }
 
-        let image = try await pipeline.generateTextToImage(
-            prompt: prompt,
-            interpretImagePaths: interpretImagePaths.isEmpty ? nil : interpretImagePaths,
-            height: height,
-            width: width,
-            steps: actualSteps,
-            guidance: actualGuidance,
-            seed: seed,
-            upsamplePrompt: upsamplePrompt,
-            checkpointInterval: checkpoint
-        ) { current, total in
-            let progress = Float(current) / Float(total) * 100
-            print("\rStep \(current)/\(total) [\(String(format: "%.0f", progress))%]", terminator: "")
-            fflush(stdout)
-        } onCheckpoint: { step, checkpointImage in
-            if let dir = checkpointDir {
-                let checkpointPath = "\(dir)/step_\(String(format: "%03d", step)).png"
-                do {
-                    try saveImage(checkpointImage, to: checkpointPath)
-                    print("\n  Checkpoint saved: step_\(String(format: "%03d", step)).png")
-                } catch {
-                    print("\n  Failed to save checkpoint at step \(step): \(error.localizedDescription)")
+        var image: CGImage? = nil
+        for iteration in 1...max(1, repeatCount) {
+            if repeatCount > 1 {
+                MLX.Memory.peakMemory = 0  // 反復ごとのピークを分離計測
+                print("--- Generation \(iteration)/\(repeatCount) ---")
+            }
+            image = try await pipeline.generateTextToImage(
+                prompt: prompt,
+                interpretImagePaths: interpretImagePaths.isEmpty ? nil : interpretImagePaths,
+                height: height,
+                width: width,
+                steps: actualSteps,
+                guidance: actualGuidance,
+                seed: seed,
+                upsamplePrompt: upsamplePrompt,
+                checkpointInterval: checkpoint
+            ) { current, total in
+                let progress = Float(current) / Float(total) * 100
+                print("\rStep \(current)/\(total) [\(String(format: "%.0f", progress))%]", terminator: "")
+                fflush(stdout)
+            } onCheckpoint: { step, checkpointImage in
+                if let dir = checkpointDir {
+                    let checkpointPath = "\(dir)/step_\(String(format: "%03d", step)).png"
+                    do {
+                        try saveImage(checkpointImage, to: checkpointPath)
+                        print("\n  Checkpoint saved: step_\(String(format: "%03d", step)).png")
+                    } catch {
+                        print("\n  Failed to save checkpoint at step \(step): \(error.localizedDescription)")
+                    }
+                }
+            }
+            if repeatCount > 1 {
+                print("\n[repeat] iteration \(iteration) Metal peak: \(MLX.Memory.peakMemory / 1_048_576) MB")
+                if clearBetween && iteration < repeatCount {
+                    await pipeline.clearAll()
+                    print("[repeat] clearAll() done")
                 }
             }
         }
+        guard let image else { throw Flux2Error.generationCancelled }
 
         print()
 
@@ -461,6 +483,12 @@ struct ImageToImage: AsyncParsableCommand {
 
     @Option(name: .long, help: "Memory optimization override: auto (default, by RAM), disabled, light, moderate, aggressive, ultra")
     var memoryOpt: String = "auto"
+
+    @Option(name: .long, help: "Generate N times in one process (memory-residency testing)")
+    var repeatCount: Int = 1
+
+    @Flag(name: .long, help: "Call clearAll() between repeated generations (sequential-reload strategy)")
+    var clearBetween: Bool = false
 
     @Option(name: .long, help: "HuggingFace token for gated models (or set HF_TOKEN env var)")
     var hfToken: String?
